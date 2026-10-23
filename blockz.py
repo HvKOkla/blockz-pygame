@@ -4,6 +4,7 @@ import time
 import random
 import sys, os
 from pathlib import Path
+from dataclasses import dataclass
 pygame.init()
 pygame.mixer.init()
 
@@ -49,9 +50,8 @@ sounds = {
 
 alpha_overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
 
-CameraRotX = math.radians(-20)
-CameraRotY = 0
-CameraX, CameraY, CameraZ = 0,0,0
+CameraRot = pygame.Vector2(math.radians(-20), 0)
+CameraPos = pygame.Vector3(0,0,0)
 
 mouse_sensitivity = math.radians(50)
 
@@ -63,20 +63,21 @@ level = 1
 
 playerSize = 0.8
 playerVelY = 0
-playerX, playerY, playerZ = 0,0,0
+playerPos = pygame.Vector3(0,0,0)
 playerSpeed = 4
 playerJumpHeight = 6
-playerStartX, playerStartY, playerStartZ = 0,0,0
+playerStart = pygame.Vector3(0,0,0)
 shadowY = 0
 
-BlockColor = []
-BlockSizeX = []
-BlockSizeY = []
-BlockSizeZ = []
-BlockX, BlockY, BlockZ = [],[],[]
-BlockType = []
-BlockTypeColor = []
-BlockTypeName = []
+@dataclass
+class Block:
+    color: tuple
+    size: pygame.Vector3
+    pos: pygame.Vector3
+    blocktype: str
+
+blocks: list[Block] = []
+BlockTypes = {}
 CollisionType = []
 
 current_fps = 0
@@ -129,11 +130,10 @@ class Game_Drawer:
     def block_order(self):
         self.LayerIDs.clear()
         self.LayerValues.clear()
-        for i in range(len(BlockX)):
-            i -= 1
-            self.vx = (BlockX[i]+(BlockSizeX[i]/2))-CameraX
-            self.vy = (BlockY[i]+(BlockSizeY[i]/2))-CameraY
-            self.vz = (BlockZ[i]+(BlockSizeZ[i]/2))-CameraZ
+        for idx, block in enumerate(blocks):
+            self.vx = (block.pos.x+(block.size.x/2))-CameraPos.x
+            self.vy = (block.pos.y+(block.size.y/2))-CameraPos.y
+            self.vz = (block.pos.z+(block.size.z/2))-CameraPos.z
             self.z = self.vx ** 2 + self.vy ** 2 + self.vz ** 2
             self.LayerValues.append(self.z)
             self.sort_Low = 1
@@ -144,13 +144,13 @@ class Game_Drawer:
                     self.sort_Low = self.sort_Mid + 1
                 else:
                     self.sort_High = self.sort_Mid
-            self.LayerIDs.insert(self.sort_Low-1, i+1)
+            self.LayerIDs.insert(self.sort_Low-1, idx+1)
 
     def init_trigonometry(self):
-        self.sinX = math.sin(CameraRotX)
-        self.cosX = math.cos(CameraRotX)
-        self.sinY = math.sin(CameraRotY)
-        self.cosY = math.cos(CameraRotY)
+        self.sinX = math.sin(CameraRot.x)
+        self.cosX = math.cos(CameraRot.x)
+        self.sinY = math.sin(CameraRot.y)
+        self.cosY = math.cos(CameraRot.y)
 
     def set_point1(self,x,y,z):
         self.x1,self.y1,self.z1 = x,y,z
@@ -187,14 +187,14 @@ class Game_Drawer:
         #screen_x = int(self.x1 / self.z1 * FL) + WIDTH // 2
         #screen_y = HEIGHT // 2 - int(self.y1 / self.z1 * FL)
         self.set_point1(
-            x1-CameraX,
-            y1-CameraY,
-            z1-CameraZ
+            x1-CameraPos.x,
+            y1-CameraPos.y,
+            z1-CameraPos.z
         )
         self.set_point2(
-            x2-CameraX,
-            y2-CameraY,
-            z2-CameraZ
+            x2-CameraPos.x,
+            y2-CameraPos.y,
+            z2-CameraPos.z
         )
         self.set_point1(
             ((self.z1*self.sinY)+(self.x1*self.cosY)),
@@ -274,14 +274,11 @@ class Game_Drawer:
         self.used_circle_points.clear()
         for i in range(1,len(self.LayerIDs)+1):
             self.getID = self.LayerIDs[i-1]
-            DRAW_COLOR = BlockColor[self.getID-1]
+            block = blocks[self.getID-1]
+            DRAW_COLOR = block.color
             self.draw_block(
-                BlockX[self.getID-1],
-                BlockY[self.getID-1],
-                BlockZ[self.getID-1],
-                BlockSizeX[self.getID-1],
-                BlockSizeY[self.getID-1],
-                BlockSizeZ[self.getID-1],
+                *block.pos,
+                *block.size
             )
 
     def draw(self):
@@ -338,16 +335,18 @@ class Game_Updater:
         alpha_overlay.blit(rendered_timer, (WIDTH//2 - rendered_timer.width//2, 0))
 
     def update_camera_position(self):
-        global CameraX, CameraY, CameraZ
-        CameraX = (playerX+(playerSize/2)) + (8 * (math.sin(CameraRotY)*math.cos(CameraRotX)))
-        CameraY = (playerY+(playerSize/2)) + (-8 * math.sin(CameraRotX))
-        CameraZ = (playerZ+(playerSize/2)) + (-8 * (math.cos(CameraRotY)*math.cos(CameraRotX)))
+        global CameraPos
+        CameraPos.xyz = (
+            (playerPos.x+(playerSize/2)) + (8 * (math.sin(CameraRot.y)*math.cos(CameraRot.x))),
+            (playerPos.y+(playerSize/2)) + (-8 * math.sin(CameraRot.x)),
+            (playerPos.z+(playerSize/2)) + (-8 * (math.cos(CameraRot.y)*math.cos(CameraRot.x)))
+        )
 
     def update_camera_rotation(self, pressed):
-        global deltatime, CameraRotX, CameraRotY
+        global deltatime, CameraRot
         pressed = pygame.key.get_pressed()
-        CameraRotX += (pressed[pygame.K_UP] - pressed[pygame.K_DOWN]) * math.pi * deltatime
-        CameraRotY += (pressed[pygame.K_RIGHT] - pressed[pygame.K_LEFT]) * -math.pi * deltatime
+        CameraRot.x += (pressed[pygame.K_UP] - pressed[pygame.K_DOWN]) * math.pi * deltatime
+        CameraRot.y += (pressed[pygame.K_RIGHT] - pressed[pygame.K_LEFT]) * -math.pi * deltatime
         if any(pygame.mouse.get_pressed()):
             mouse_pos = list(pygame.mouse.get_pos())
 
@@ -357,27 +356,28 @@ class Game_Updater:
                 self.mouseRotation = 1
                 self.mouseOx, self.mouseOy = mouse_pos
             else:
-                CameraRotX += (mouse_pos[1]-self.mouseOy) * mouse_sensitivity
-                CameraRotY += (mouse_pos[0]-self.mouseOx) * mouse_sensitivity
+                CameraRot.x += (mouse_pos[1]-self.mouseOy) * mouse_sensitivity
+                CameraRot.y += (mouse_pos[0]-self.mouseOx) * mouse_sensitivity
                 self.mouseOx, self.mouseOy = mouse_pos
         else:
             self.mouseRotation = 0
-        CameraRotX = max(math.radians(-90), min(CameraRotX, math.radians(30)))
+        CameraRot.x = max(math.radians(-90), min(CameraRot.x, math.radians(30)))
 
     def check_player_collision(self):
-        global playerX, playerY, playerZ, playerVelY, CameraRotX, CameraRotY
+        global playerPos, playerVelY, CameraRot
         if self.collision == "end":
             return
         self.CollisionID.clear()
         CollisionType.clear()
         self.collision = 0
-        for c in range(3,len(BlockX)+1):
-            if playerX < (BlockX[c-1] + BlockSizeX[c-1]) and (playerX + playerSize) > BlockX[c-1]:
-                if playerY < (BlockY[c-1] + BlockSizeY[c-1]) and (playerY + playerSize) > BlockY[c-1]:
-                    if playerZ < (BlockZ[c-1] + BlockSizeZ[c-1]) and (playerZ + playerSize) > BlockZ[c-1]:
+        for c in range(3,len(blocks)+1):
+            block = blocks[c-1]
+            if playerPos.x < (block.pos.x + block.size.x) and (playerPos.x + playerSize) > block.pos.x:
+                if playerPos.y < (block.pos.y + block.size.y) and (playerPos.y + playerSize) > block.pos.y:
+                    if playerPos.z < (block.pos.z + block.size.z) and (playerPos.z + playerSize) > block.pos.z:
                         self.collision = 1
                         self.CollisionID.append(c)
-                        CollisionType.append(BlockType[c-1])
+                        CollisionType.append(block.blocktype)
         if "end" in CollisionType:
             global level
             sounds["end"].play()
@@ -385,36 +385,33 @@ class Game_Updater:
             level += 1
             self.init_level()
             game_levels.init_level()
-        if ("lava" in CollisionType) or playerY < -10:
+        if ("lava" in CollisionType) or playerPos.y < -10:
             sounds["die"].play()
-            playerX = playerStartX
-            playerY = playerStartY
-            playerZ = playerStartZ
+            playerPos.xyz = playerStart.xyz
             playerVelY = 0
-            CameraRotX = math.radians(-20)
-            CameraRotY = 0
+            CameraRot.xy = (math.radians(-20), 0)
             self.collision = 0
 
     def player_y_movement(self, pressed, yDir: bool):
-        global playerY, playerVelY, deltatime, BlockY, playerSize
-        playerY += playerVelY * deltatime
+        global playerPos, playerVelY, deltatime, BlockY, playerSize
+        playerPos.y += playerVelY * deltatime
         playerVelY = max(-8, playerVelY + -15 * deltatime)
 
-        playerY += (yDir * 2 - 1) / 1000
+        playerPos.y += (yDir * 2 - 1) / 1000
         self.check_player_collision()
 
         if self.collision == 1:
             playerVelY = 0
             if yDir:
-                for c in range(1,len(self.CollisionID)+1):
-                    self.getY = (BlockY[self.CollisionID[c-1]-1]) - playerSize
-                    if self.getY < playerY:
-                        playerY = self.getY
+                for c in range(len(self.CollisionID)):
+                    self.getY = (blocks[self.CollisionID[c]-1].pos.y) - playerSize
+                    if self.getY < playerPos.y:
+                        playerPos.y = self.getY
             else:
-                for c in range(1,len(self.CollisionID)+1):
-                    self.getY = (BlockY[self.CollisionID[c-1]-1]) + BlockSizeY[self.CollisionID[c-1]-1]
-                    if self.getY > playerY:
-                        playerY = self.getY
+                for c in range(len(self.CollisionID)):
+                    self.getY = (blocks[self.CollisionID[c]-1].pos.y) + blocks[self.CollisionID[c]-1].size.y
+                    if self.getY > playerPos.y:
+                        playerPos.y = self.getY
                 if pressed[pygame.K_SPACE]:
                     playerVelY = playerJumpHeight
                     sounds["jump"].play()
@@ -430,18 +427,18 @@ class Game_Updater:
                 if "small" in CollisionType:
                     playerSize = 2
         else:
-            playerY += (yDir*2-1)/1000
+            playerPos.y += (yDir*2-1)/1000
 
     def player_xz_movement(self, x, z):
-        global playerX, playerZ
-        playerX += x
+        global playerPos
+        playerPos.x += x
         self.check_player_collision()
         if self.collision == 1:
-            playerX -= x
-        playerZ += z
+            playerPos.x -= x
+        playerPos.z += z
         self.check_player_collision()
         if self.collision == 1:
-            playerZ -= z
+            playerPos.z -= z
 
     def update_player(self, pressed):
         self.player_y_movement(pressed, playerVelY > 0)
@@ -452,18 +449,19 @@ class Game_Updater:
             self.moveX = (self.moveX / self.mag) * deltatime * playerSpeed
             self.moveZ = (self.moveZ / self.mag) * deltatime * playerSpeed
             self.player_xz_movement(
-                (self.moveX * math.cos(CameraRotY)) - (self.moveZ * math.sin(CameraRotY)),
-                (self.moveX * math.sin(CameraRotY)) + (self.moveZ * math.cos(CameraRotY))
+                (self.moveX * math.cos(CameraRot.y)) - (self.moveZ * math.sin(CameraRot.y)),
+                (self.moveX * math.sin(CameraRot.y)) + (self.moveZ * math.cos(CameraRot.y))
             )
 
     def player_shadow(self):
         global shadowY
         shadowY = -999
-        for c in range(3, len(BlockX)+1):
-            if playerX < (BlockX[c-1] + BlockSizeX[c-1]) and (playerX + playerSize) > BlockX[c-1]:
-                if playerZ < (BlockZ[c-1] + BlockSizeZ[c-1]) and (playerZ + playerSize) > BlockZ[c-1]:
-                    self.getY = BlockY[c-1] + BlockSizeY[c-1]
-                    if playerY >= self.getY:
+        for c in range(2, len(blocks)):
+            block = blocks[c]
+            if playerPos.x < (block.pos.x + block.size.x) and (playerPos.x + playerSize) > block.pos.x:
+                if playerPos.z < (block.pos.z + block.size.z) and (playerPos.z + playerSize) > block.pos.z:
+                    self.getY = block.pos.y + block.size.y
+                    if shadowY < self.getY <= playerPos.y:
                         shadowY = self.getY
 
     def update(self):
@@ -473,12 +471,8 @@ class Game_Updater:
         self.player_shadow()
         self.update_camera_position()
 
-        BlockX[0] = playerX
-        BlockY[0] = playerY
-        BlockZ[0] = playerZ
-        BlockX[1] = playerX
-        BlockY[1] = shadowY
-        BlockZ[1] = playerZ
+        blocks[0].pos.xyz = playerPos.xyz
+        blocks[1].pos.xyz = (playerPos.x, shadowY, playerPos.z)
         if self.fps_show:
             self.show_fps()
         if self.time_show:
@@ -488,14 +482,12 @@ class Game_Levels:
     def __init__(self):
         global playerSize
         playerSize = 0.8
-        BlockTypeName.clear()
-        BlockTypeColor.clear()
+        BlockTypes.clear()
         self.init_block_types()
         self.init_level()
 
     def add_block_type(self, name: str, color: tuple):
-        BlockTypeName.append(name)
-        BlockTypeColor.append(color)
+        BlockTypes[name] = color
 
     def init_block_types(self):
         self.add_block_type("player", (100,255,255,DRAW_TRANSPARENCY))
@@ -508,15 +500,8 @@ class Game_Levels:
         self.add_block_type("black", (0,0,0,DRAW_TRANSPARENCY))
 
     def init_level(self):
-        global CameraRotX, CameraRotY, playerX, playerY, playerZ
-        BlockX.clear()
-        BlockY.clear()
-        BlockZ.clear()
-        BlockSizeX.clear()
-        BlockSizeY.clear()
-        BlockSizeZ.clear()
-        BlockColor.clear()
-        BlockType.clear()
+        global CameraRot, playerPos
+        blocks.clear()
         # CameraRotX = -20
         # CameraRotY = 0
         match level:
@@ -540,26 +525,22 @@ class Game_Levels:
                 self.level9()
             case 10:
                 self.level10()
-        playerX = playerStartX
-        playerY = playerStartY
-        playerZ = playerStartZ
+        playerPos.xyz = playerStart.xyz
 
     def add_block(self, x, y, z, sizeX, sizeY, sizeZ, block_type):
-        BlockX.append(x)
-        BlockY.append(y)
-        BlockZ.append(z)
-        BlockSizeX.append(sizeX)
-        BlockSizeY.append(sizeY)
-        BlockSizeZ.append(sizeZ)
-        BlockColor.append(BlockTypeColor[BlockTypeName.index(block_type)])
-        BlockType.append(block_type)
+        blocks.append(Block(
+            color=BlockTypes[block_type],
+            size=pygame.Vector3(sizeX,sizeY,sizeZ),
+            pos=pygame.Vector3(x,y,z),
+            blocktype=block_type
+        ))
 
     def add_player(self, x, y, z):
-        global playerStartX, playerStartY, playerStartZ
-        playerX, playerY, playerZ = x,y,z
-        playerStartX, playerStartY, playerStartZ = x,y,z
+        global playerStart
+        playerPos.xyz = (x,y,z)
+        playerStart.xyz = (x,y,z)
         self.add_block(
-            playerX,playerY,playerZ,
+            *playerPos.xyz,
             playerSize,playerSize,playerSize,
             "player"
         )
