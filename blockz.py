@@ -7,13 +7,19 @@ from pathlib import Path
 pygame.init()
 pygame.mixer.init()
 
-FPS = 30
+SETTINGS = {
+    "DISABLE_CULLING": False,
+    "DISABLE_LEVEL_SELECTION": False,
+    "FPS_MAX": 30,
+    "MUSIC_VOLUME": 1 # 1 max
+}
+
 WIDTH,HEIGHT = 480,360
 screen = pygame.display.set_mode((WIDTH,HEIGHT), pygame.SCALED | pygame.FULLSCREEN)
 pygame.display.set_caption("Blockz")
 clock = pygame.time.Clock()
 
-scene = "level_selection" # change this to "playing" to skip level selection
+scene = "playing" if SETTINGS["DISABLE_LEVEL_SELECTION"] else "level_selection"
 
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     base_dir = Path(sys._MEIPASS)
@@ -47,7 +53,7 @@ CameraRotX = math.radians(-20)
 CameraRotY = 0
 CameraX, CameraY, CameraZ = 0,0,0
 
-mouse_sensitivity = math.radians(30)
+mouse_sensitivity = math.radians(50)
 
 FL = 300
 nearZ = 0.3
@@ -73,12 +79,20 @@ BlockTypeColor = []
 BlockTypeName = []
 CollisionType = []
 
-current_fps = 30
+current_fps = 0
 frame = 0
 
-DRAW_SIZE = 0.1
+DRAW_SIZE = 0.075
 DRAW_COLOR = (0,0,0)
-DRAW_TRANSPARENCY = 192
+DRAW_TRANSPARENCY = 153
+
+def get_edge_color(color: tuple):
+    return (
+        (color[0] + 255) // 2,
+        (color[1] + 255) // 2,
+        (color[2] + 255) // 2,
+        color[3]
+    )
 
 font = pygame.font.Font(base_dir / "assets/RobotoMono-Regular.ttf")
 
@@ -103,7 +117,6 @@ class Game_Drawer:
         self.mouseRotation = 0
         self.getY = 0
         self.mag = 0
-        self.fps_show = 0
         self.LayerIDs = []
         self.LayerValues = []
         self.CollisionID = 0
@@ -111,6 +124,7 @@ class Game_Drawer:
         # variables that arent a part of the original game
         # and are used for different purposes
         self.used_circle_points = []
+        self.fps_show = 0
 
     def block_order(self):
         self.LayerIDs.clear()
@@ -159,7 +173,17 @@ class Game_Drawer:
                     nearZ
                 )
 
-    def draw_3d_line(self,x1,y1,z1,x2,y2,z2,size,overlay=None):
+    @staticmethod
+    def _check_line_visibility(drawing_points):
+        rect = pygame.Rect(
+            min(drawing_points[0][0], drawing_points[1][0]),
+            min(drawing_points[0][1], drawing_points[1][1]),
+            abs(drawing_points[1][0] - drawing_points[0][0])+1,
+            abs(drawing_points[1][1] - drawing_points[0][1])+1,
+        )
+        return screen.get_rect().colliderect(rect)
+
+    def draw_3d_line(self,x1,y1,z1,x2,y2,z2,size,overlay=None,edge_overlay=None):
         #screen_x = int(self.x1 / self.z1 * FL) + WIDTH // 2
         #screen_y = HEIGHT // 2 - int(self.y1 / self.z1 * FL)
         self.set_point1(
@@ -200,25 +224,28 @@ class Game_Drawer:
                 (round(self.x1/self.z1*FL)+WIDTH//2,HEIGHT-(round(self.y1/self.z1*FL)+HEIGHT//2)),
                 (round(self.x2/self.z2*FL)+WIDTH//2,HEIGHT-(round(self.y2/self.z2*FL)+HEIGHT//2))
             ]
+            if not SETTINGS["DISABLE_CULLING"]:
+                if not self._check_line_visibility(drawing_points):
+                    return
             pygame.draw.aaline(
                 overlay if overlay else alpha_overlay,
-                [*DRAW_COLOR, DRAW_TRANSPARENCY],
+                DRAW_COLOR,
                 drawing_points[0],
                 drawing_points[1],
                 DRAW_SIZE*2
             )
             if drawing_points[0] not in self.used_circle_points:
                 pygame.draw.aacircle(
-                    overlay if overlay else alpha_overlay,
-                    [*DRAW_COLOR, DRAW_TRANSPARENCY],
+                    edge_overlay if edge_overlay else alpha_overlay,
+                    DRAW_COLOR,
                     drawing_points[0],
                     DRAW_SIZE
                 )
                 self.used_circle_points.append(drawing_points[0])
             if drawing_points[1] not in self.used_circle_points:
                 pygame.draw.aacircle(
-                    overlay if overlay else alpha_overlay,
-                    [*DRAW_COLOR, DRAW_TRANSPARENCY],
+                    edge_overlay if edge_overlay else alpha_overlay,
+                    DRAW_COLOR,
                     drawing_points[1],
                     DRAW_SIZE
                 )
@@ -226,24 +253,26 @@ class Game_Drawer:
 
     def draw_block(self,x,y,z,sizeX,sizeY,sizeZ):
         temp = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
-        self.draw_3d_line(x, y, z, x + sizeX, y, z, DRAW_SIZE, temp)
-        self.draw_3d_line(x+sizeX, y, z, x+sizeX, y+sizeY, z, DRAW_SIZE, temp)
-        self.draw_3d_line(x+sizeX, y+sizeY, z, x, y+sizeY, z, DRAW_SIZE, temp)
-        self.draw_3d_line(x, y+sizeY, z, x, y, z, DRAW_SIZE, temp)
-        self.draw_3d_line(x, y, z+sizeZ, x+sizeX, y, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x+sizeX, y, z+sizeZ, x+sizeX, y+sizeY, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x+sizeX, y+sizeY, z+sizeZ, x, y+sizeY, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x, y+sizeY, z+sizeZ, x, y, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x, y, z, x, y, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x+sizeX, y, z, x+sizeX, y, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x, y+sizeY, z, x, y+sizeY, z+sizeZ, DRAW_SIZE, temp)
-        self.draw_3d_line(x+sizeX, y+sizeY, z, x+sizeX, y+sizeY, z+sizeZ, DRAW_SIZE, temp)
+        temp_edge = pygame.Surface((WIDTH,HEIGHT), pygame.SRCALPHA)
+        self.draw_3d_line(x, y, z, x + sizeX, y, z, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x+sizeX, y, z, x+sizeX, y+sizeY, z, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x+sizeX, y+sizeY, z, x, y+sizeY, z, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x, y+sizeY, z, x, y, z, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x, y, z+sizeZ, x+sizeX, y, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x+sizeX, y, z+sizeZ, x+sizeX, y+sizeY, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x+sizeX, y+sizeY, z+sizeZ, x, y+sizeY, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x, y+sizeY, z+sizeZ, x, y, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x, y, z, x, y, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x+sizeX, y, z, x+sizeX, y, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x, y+sizeY, z, x, y+sizeY, z+sizeZ, DRAW_SIZE, temp, temp_edge)
+        self.draw_3d_line(x+sizeX, y+sizeY, z, x+sizeX, y+sizeY, z+sizeZ, DRAW_SIZE, temp, temp_edge)
         alpha_overlay.blit(temp)
+        alpha_overlay.blit(temp_edge)
 
     def draw_all_blocks(self):
         global DRAW_COLOR
         self.used_circle_points.clear()
-        for i in range(len(self.LayerIDs)):
+        for i in range(1,len(self.LayerIDs)+1):
             self.getID = self.LayerIDs[i-1]
             DRAW_COLOR = BlockColor[self.getID-1]
             self.draw_block(
@@ -270,8 +299,6 @@ class Game_Updater:
         self.mag = 0
         self.moveX = 0
         self.moveZ = 0
-        self.fps_show = 0
-        self.time_show = 0
         self.cosX, self.cosY = 0,0
         self.sinX, self.sinY = 0,0
         self.p = 0
@@ -288,6 +315,11 @@ class Game_Updater:
         self.CollisionID = []
         self.LayerIDs = []
         self.LayerValues = []
+
+        # variables that arent a part of the original game
+        # and are used for different purposes
+        self.fps_show = 0
+        self.time_show = 0
 
     def init_level(self):
         global playerVelY
@@ -415,7 +447,7 @@ class Game_Updater:
         self.player_y_movement(pressed, playerVelY > 0)
         self.moveX = pressed[pygame.K_d] - pressed[pygame.K_a]
         self.moveZ = pressed[pygame.K_w] - pressed[pygame.K_s]
-        self.mag = math.sqrt(self.moveX**2 + self.moveZ**2)
+        self.mag = math.hypot(self.moveX, self.moveZ)
         if self.mag > 0:
             self.moveX = (self.moveX / self.mag) * deltatime * playerSpeed
             self.moveZ = (self.moveZ / self.mag) * deltatime * playerSpeed
@@ -466,14 +498,14 @@ class Game_Levels:
         BlockTypeColor.append(color)
 
     def init_block_types(self):
-        self.add_block_type("player", (100,255,255))
-        self.add_block_type("shadow", (100,100,255))
-        self.add_block_type("ground", (255,255,255))
-        self.add_block_type("end", (0,255,0))
-        self.add_block_type("lava", (255,0,0))
-        self.add_block_type("bouncy", (255,255,0))
-        self.add_block_type("ice", (161,231,247))
-        self.add_block_type("black", (0,0,0))
+        self.add_block_type("player", (100,255,255,DRAW_TRANSPARENCY))
+        self.add_block_type("shadow", (100,100,255,DRAW_TRANSPARENCY))
+        self.add_block_type("ground", (255,255,255,DRAW_TRANSPARENCY))
+        self.add_block_type("end", (0,255,0,DRAW_TRANSPARENCY))
+        self.add_block_type("lava", (255,0,0,DRAW_TRANSPARENCY))
+        self.add_block_type("bouncy", (255,255,0,DRAW_TRANSPARENCY))
+        self.add_block_type("ice", (161,231,247,DRAW_TRANSPARENCY))
+        self.add_block_type("black", (0,0,0,DRAW_TRANSPARENCY))
 
     def init_level(self):
         global CameraRotX, CameraRotY, playerX, playerY, playerZ
@@ -814,12 +846,16 @@ while running:
             if event.key == pygame.K_t:
                 game_updater.time_show ^= 1
             if event.key == pygame.K_ESCAPE:
-                scene = "level_selection"
+                if not SETTINGS["DISABLE_LEVEL_SELECTION"]:
+                    scene = "level_selection"
         if event.type == SONG_END:
             play_song()
 
-    deltatime = clock.tick(FPS)/1000
+    deltatime = clock.tick(SETTINGS["FPS_MAX"])/1000
     current_fps = clock.get_fps()
+
+    if pygame.mixer.music.get_volume() != SETTINGS["MUSIC_VOLUME"]:
+        pygame.mixer.music.set_volume(SETTINGS["MUSIC_VOLUME"])
 
     screen.fill((0,0,0))
     if scene == "playing":
