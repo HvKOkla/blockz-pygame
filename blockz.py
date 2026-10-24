@@ -13,8 +13,8 @@ pygame.mixer.init()
 SETTINGS = {
     "DISABLE_CULLING": False,
     "DISABLE_LEVEL_SELECTION": False,
-    "FPS_MAX": 60,          # 30 -> 60 (plus fluide, le jeu est léger)
-    "MUSIC_VOLUME": 1.0     # 1 max, float pour éviter le bug de comparaison
+    "FPS_MAX": 60,          # 30 -> 60 (smoother, the game runs more smoothly)
+    "MUSIC_VOLUME": 1.0     # 1 max, float to avoid the comparison bug
 }
 
 WIDTH, HEIGHT = 480, 360
@@ -74,7 +74,7 @@ playerJumpHeight = 6
 playerStart = pygame.Vector3(0, 0, 0)
 shadowY = 0
 
-# Cache des polices / rects
+
 screen_rect = screen.get_rect()
 
 
@@ -135,11 +135,11 @@ class Game_Drawer:
         self.LayerValues = []
         self.CollisionID = 0
 
-        # Surfaces réutilisées (allouées UNE fois) -> gain de perf énorme
+        # Reused memory (allocated ONCE) -> huge performance gain
         self.temp = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         self.temp_edge = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
-        # set au lieu de list pour le test d'appartenance O(1)
+        
         self.used_circle_points = set()
 
     def block_order(self):
@@ -723,7 +723,7 @@ class Game_Levels:
         self.add_block(5, 0, -8, 3, 1, 3, "ground")
 
 
-# ==================== BOUTONS ====================
+
 
 BLUE = (60, 120, 255)
 GREY = (110, 110, 110)
