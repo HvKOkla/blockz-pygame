@@ -13,8 +13,8 @@ pygame.mixer.init()
 SETTINGS = {
     "DISABLE_CULLING": False,
     "DISABLE_LEVEL_SELECTION": False,
-    "FPS_MAX": 60,          # 30 -> 60 (smoother, the game runs more smoothly)
-    "MUSIC_VOLUME": 1.0     # 1 max, float to avoid the comparison bug
+    "FPS_MAX": 60,
+    "MUSIC_VOLUME": 1. # 1 max
 }
 
 WIDTH, HEIGHT = 480, 360
@@ -42,7 +42,6 @@ def play_song():
     new_song = random.choice(songs)
     pygame.mixer.music.load(new_song)
     pygame.mixer.music.play()
-
 
 play_song()
 
@@ -74,9 +73,7 @@ playerJumpHeight = 6
 playerStart = pygame.Vector3(0, 0, 0)
 shadowY = 0
 
-
 screen_rect = screen.get_rect()
-
 
 @dataclass
 class Block:
@@ -84,7 +81,6 @@ class Block:
     size: pygame.Vector3
     pos: pygame.Vector3
     blocktype: str
-
 
     def __hash__(self):
         return hash(str(self.color) + str(self.size) + str(self.pos) + self.blocktype)
@@ -109,9 +105,7 @@ def get_edge_color(color: tuple):
         color[3]
     )
 
-
 font = pygame.font.Font(base_dir / "assets/RobotoMono-Regular.ttf")
-
 
 class Game_Drawer:
     def __init__(self):
@@ -138,10 +132,8 @@ class Game_Drawer:
         self.LayerValues = []
         self.CollisionID = 0
 
-        # Reused memory (allocated ONCE) -> huge performance gain
         self.temp = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         self.temp_edge = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-
         
         self.used_circle_points = set()
 
@@ -152,7 +144,7 @@ class Game_Drawer:
             self.vx = (block.pos.x + (block.size.x / 2)) - CameraPos.x
             self.vy = (block.pos.y + (block.size.y / 2)) - CameraPos.y
             self.vz = (block.pos.z + (block.size.z / 2)) - CameraPos.z
-            self.z = self.vx ** 2 + self.vy ** 2 + self.vz ** 2
+            self.z = math.hypot(self.vx, self.vy, self.vz)
             self.LayerValues.append(self.z)
             self.sort_Low = 1
             self.sort_High = len(self.LayerValues)
@@ -249,7 +241,6 @@ class Game_Drawer:
                 self.used_circle_points.add(drawing_points[1])
 
     def draw_block(self, x, y, z, sizeX, sizeY, sizeZ):
-        # Clear les surfaces réutilisées au lieu d'en créer de nouvelles
         self.temp.fill((0, 0, 0, 0))
         self.temp_edge.fill((0, 0, 0, 0))
         self.draw_3d_line(x, y, z, x + sizeX, y, z, DRAW_SIZE, self.temp, self.temp_edge)
@@ -359,9 +350,7 @@ class Game_Updater:
         if "end" in CollisionType:
             sounds["end"].play()
             self.collision = "end"
-            level += 1
-            if level > 10:
-                level = 10   # évite un match case sans branche -> blocks vides
+            level = min(10, level+1)
             self.init_level()
             game_levels.init_level()
         if ("lava" in CollisionType) or playerPos.y < -10:
@@ -404,7 +393,7 @@ class Game_Updater:
                     playerVelY = 13
                     sounds["bouncy"].play()
                 if "small" in CollisionType:
-                    playerSize = PLAYER_BASE_SIZE * 2   # cohérent avec la base
+                    playerSize = PLAYER_BASE_SIZE * 2
         else:
             playerPos.y += (yDir * 2 - 1) / 1000
 
@@ -435,7 +424,6 @@ class Game_Updater:
     def player_shadow(self):
         global shadowY
         shadowY = -999
-        # indexation unifiée : commence à 2 comme avant, mais sans +1/-1 bizarre
         for c in range(2, len(blocks)):
             block = blocks[c]
             if playerPos.x < (block.pos.x + block.size.x) and (playerPos.x + playerSize) > block.pos.x:
@@ -457,7 +445,6 @@ class Game_Updater:
             self.show_fps()
         if self.time_show:
             self.show_time()
-
 
 class Game_Levels:
     def __init__(self):
@@ -483,7 +470,7 @@ class Game_Levels:
     def init_level(self):
         global playerPos, playerSize
         blocks.clear()
-        playerSize = PLAYER_BASE_SIZE   # reset taille à chaque niveau
+        playerSize = PLAYER_BASE_SIZE
         match level:
             case 1: self.level1()
             case 2: self.level2()
@@ -512,7 +499,6 @@ class Game_Levels:
         self.add_block(*playerPos.xyz, playerSize, playerSize, playerSize, "player")
         self.add_block(0, 0, 0, playerSize, 0, playerSize, "shadow")
 
-    # ---- niveaux inchangés (copie ton code tel quel ici) ----
     def level1(self):
         self.add_player(0, 0, 0)
         self.add_block(-2, 0, -2, 5, 1, 5, "ground")
@@ -725,11 +711,8 @@ class Game_Levels:
         self.add_block(5, 0, -8, 3, 1, 3, "ground")
 
 
-
-
 BLUE = (60, 120, 255)
 GREY = (110, 110, 110)
-
 
 class Button(pygame.sprite.Sprite):
     def __init__(self, *groups, x: float, y: float, w: float, h: float,
@@ -740,7 +723,7 @@ class Button(pygame.sprite.Sprite):
         self.color = color
         self.action = action
         self.text = text
-        self.was_pressed = False   # évite le déclenchement en boucle
+        self.was_pressed = False
 
     def update(self):
         mouse_pos = pygame.mouse.get_pos()
@@ -762,7 +745,6 @@ class Button(pygame.sprite.Sprite):
         if clicked and not self.was_pressed:
             self.action()
         self.was_pressed = clicked
-
 
 game_drawer = Game_Drawer()
 game_updater = Game_Updater()
@@ -786,7 +768,7 @@ for row in range(ROWS):
         y = grid_y + row * (CELL + GAP)
         idx = row * COLS + col
 
-        if idx <= 9:   # 10 niveaux (0..9)
+        if idx <= 9:
             color = BLUE
 
             def action(idx=idx):
