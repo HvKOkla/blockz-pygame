@@ -76,6 +76,9 @@ class Block:
     pos: pygame.Vector3
     blocktype: str
 
+    def __hash__(self):
+        return hash(str(self.color) + str(self.size) + str(self.pos) + self.blocktype)
+
 blocks: list[Block] = []
 BlockTypes = {}
 CollisionType = []
@@ -86,14 +89,6 @@ frame = 0
 DRAW_SIZE = 0.075
 DRAW_COLOR = (0,0,0)
 DRAW_TRANSPARENCY = 153
-
-def get_edge_color(color: tuple):
-    return (
-        (color[0] + 255) // 2,
-        (color[1] + 255) // 2,
-        (color[2] + 255) // 2,
-        color[3]
-    )
 
 font = pygame.font.Font(base_dir / "assets/RobotoMono-Regular.ttf")
 
@@ -134,7 +129,7 @@ class Game_Drawer:
             self.vx = (block.pos.x+(block.size.x/2))-CameraPos.x
             self.vy = (block.pos.y+(block.size.y/2))-CameraPos.y
             self.vz = (block.pos.z+(block.size.z/2))-CameraPos.z
-            self.z = self.vx ** 2 + self.vy ** 2 + self.vz ** 2
+            self.z = math.hypot(self.vx, self.vy, self.vz)
             self.LayerValues.append(self.z)
             self.sort_Low = 1
             self.sort_High = len(self.LayerValues)
@@ -307,7 +302,6 @@ class Game_Updater:
         self.sort_High = 0
         self.sort_Low = 0
         self.sort_Mid = 0
-        self.vx,self.vy,self.vz = 0,0,0
         self.z = 0
         self.CollisionID = []
         self.LayerIDs = []
